@@ -36,30 +36,36 @@ Estructura de datos OfertaIndividual
 2.- Variables de estado:
 
 solidity
-´´´bash
-address public immutable owner;
-address public mejorOferente;
-uint public mejorOferta;
-uint public inicio;
-uint public duracionInicial = 5 minutes;
-uint public duracionActual;
-bool public finalizada;
-´´´
-Sistemas de almacenamiento:
+```bash
+    address public immutable owner;
+    address public mejorOferente;
+    uint public mejorOferta;
+    uint public inicio;
+    uint public duracionInicial = 5 minutes;
+    uint public duracionActual;
+    bool public finalizada;
+```
+3.- Sistemas de almacenamiento:
 
 solidity
-mapping(address => OfertaIndividual[]) public historialOfertas;
-mapping(address => uint) public saldosParticipantes;
-address[] public participantes;
+```bash
+
+    mapping(address => OfertaIndividual[]) public historialOfertas;
+    mapping(address => uint) public saldosParticipantes;
+    address[] public participantes;
+```
 Eventos:
 
 solidity
-event NuevaOferta(address indexed oferente, uint monto, uint nuevoTiempoFinal);
-event SubastaExtendida(uint tiempoAnterior, uint nuevoTiempoFinal);
-event SubastaFinalizada(address ganador, uint monto);
-event FondosRetirados(address indexed to, uint amount);
-event ReembolsoParcial(address indexed oferente, uint monto);
-Funciones (clasificadas por propósito):
+```bash
+
+    event NuevaOferta(address indexed oferente, uint monto, uint nuevoTiempoFinal);
+    event SubastaExtendida(uint tiempoAnterior, uint nuevoTiempoFinal);
+    event SubastaFinalizada(address ganador, uint monto);
+    event FondosRetirados(address indexed to, uint amount);
+    event ReembolsoParcial(address indexed oferente, uint monto);
+```
+5.- Funciones (clasificadas por propósito):
 
 Modificadores (subastaActiva, soloOwner)
 
@@ -72,30 +78,33 @@ Consultas (obtenerTodasOfertas, tiempoRestante, verBalance)
 🎯 Funcionalidades Clave
 1. Mecanismo de Ofertas
 solidity
-function ofertar() external payable subastaActiva {
-    require(msg.value > 0, "Debes enviar ETH");
-    uint total = saldosParticipantes[msg.sender] + msg.value;
-    uint minimoRequerido = mejorOferta + (mejorOferta * 5) / 100;
-    
-    if (mejorOferta > 0) {
-        require(total >= minimoRequerido, "Oferta debe ser ≥5% mayor");
+```bash
+
+    function ofertar() external payable subastaActiva {
+        require(msg.value > 0, "Debes enviar ETH");
+        uint total = saldosParticipantes[msg.sender] + msg.value;
+        uint minimoRequerido = mejorOferta + (mejorOferta * 5) / 100;
+        
+        if (mejorOferta > 0) {
+            require(total >= minimoRequerido, "Oferta debe ser ≥5% mayor");
+        }
+        
+        // Extensión de tiempo (+10 min)
+        duracionActual += 10 minutes;
+        
+        // Registro histórico
+        historialOfertas[msg.sender].push(OfertaIndividual({
+            monto: msg.value,
+            timestamp: block.timestamp,
+            reembolsada: false
+        }));
+        
+        // Actualización de estado
+        saldosParticipantes[msg.sender] = total;
+        mejorOferente = msg.sender;
+        mejorOferta = total;
     }
-    
-    // Extensión de tiempo (+10 min)
-    duracionActual += 10 minutes;
-    
-    // Registro histórico
-    historialOfertas[msg.sender].push(OfertaIndividual({
-        monto: msg.value,
-        timestamp: block.timestamp,
-        reembolsada: false
-    }));
-    
-    // Actualización de estado
-    saldosParticipantes[msg.sender] = total;
-    mejorOferente = msg.sender;
-    mejorOferta = total;
-}
+```
 2. Sistema de Extensiones
 Lógica: Cada oferta exitosa añade 10 minutos a duracionActual
 
@@ -109,37 +118,48 @@ Oferta 2 (t=10 min): duración = 25 min
 
 3. Reembolsos Parciales
 solidity
-function retirarExcedente(uint monto) external subastaActiva {
-    uint excedente = saldosParticipantes[msg.sender];
-    
-    if (msg.sender == mejorOferente) {
-        excedente -= mejorOferta; // Solo permite retirar el excedente
+```bash
+
+    function retirarExcedente(uint monto) external subastaActiva {
+        uint excedente = saldosParticipantes[msg.sender];
+        
+        if (msg.sender == mejorOferente) {
+            excedente -= mejorOferta; // Solo permite retirar el excedente
+        }
+        
+        require(excedente >= monto, "Fondos insuficientes");
+        saldosParticipantes[msg.sender] -= monto;
+        payable(msg.sender).transfer(monto);
     }
-    
-    require(excedente >= monto, "Fondos insuficientes");
-    saldosParticipantes[msg.sender] -= monto;
-    payable(msg.sender).transfer(monto);
-}
+```
+
 4. Finalización y Comisiones
 solidity
-function retirarFondos() external soloOwner {
-    require(finalizada, "Subasta no finalizada");
-    uint monto = mejorOferta;
-    uint comision = (monto * 2) / 100;
-    uint neto = monto - comision;
-    payable(owner).transfer(neto); // Owner recibe el 98%
-}
+```bash
+
+    function retirarFondos() external soloOwner {
+        require(finalizada, "Subasta no finalizada");
+        uint monto = mejorOferta;
+        uint comision = (monto * 2) / 100;
+        uint neto = monto - comision;
+        payable(owner).transfer(neto); // Owner recibe el 98%
+    }
+```
+
 🔄 Flujo de Datos
 Diagram
-Code
 
+```bash
 
+    graph TD
+        A[Oferta] --> B{Validación}
+        B -->|Éxito| C[Extender tiempo]
+        C --> D[Registrar en historial]
+        D --> E[Actualizar mejor oferta]
+        E --> F[Emitir eventos]
+        B -->|Fallo| G[Revertir]
 
-
-
-
-
-
+```
 
 📊 Estructura de Almacenamiento
 Variable	Tipo	Descripción
@@ -147,7 +167,7 @@ historialOfertas	mapping(address → OfertaIndividual[])	Todas las ofertas por d
 saldosParticipantes	mapping(address → uint)	Balance total por participante
 participantes	address[]	Lista de todos los oferentes
 ⚙️ Funciones de Consulta
-obtenerTodasOfertas():
+1.- obtenerTodasOfertas():
 
 Devuelve 4 arrays paralelos:
 
@@ -159,14 +179,22 @@ Timestamps
 
 Estados de reembolso
 
-tiempoRestante():
+2.- tiempoRestante():
 
 solidity
+```bash
+
 return (inicio + duracionActual) - block.timestamp;
-verBalance():
+```
+
+3.- verBalance():
 
 solidity
+```bash
+
 return address(this).balance;
+```
+
 🛡️ Modelo de Seguridad
 Patrón Checks-Effects-Interactions:
 
@@ -182,24 +210,7 @@ Acceso restringido:
 
 finalizar() y retirarFondos() solo para owner
 
-📝 Ejemplo de Transacción
-javascript
-// Oferta inicial
-await subasta.ofertar({ 
-    value: ethers.utils.parseEther("1"),
-    gasLimit: 300000 
-});
 
-// Consultar estado
-const [,,tiempos] = await subasta.obtenerTodasOfertas();
-console.log(`Oferta registrada en: ${new Date(tiempos[0]*1000)}`);
-Este diseño garantiza:
-
-Transparencia: Todas las ofertas son registradas públicamente
-
-Justicia: Mecanismo claro de extensiones y reembolsos
-
-Eficiencia: Costos de gas optimizados para operaciones frecuentes
 
 
 
