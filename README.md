@@ -1,6 +1,4 @@
-📜 README - Contrato de Subasta Flash con Extensiones Dinámicas
-https://img.shields.io/badge/Solidity-0.8.26-informational?logo=solidity
-https://img.shields.io/badge/License-MIT-blue
+📜 README - Contrato de Subasta Flash
 
 📌 Descripción
 Contrato inteligente para subastas descentralizadas con:
@@ -24,91 +22,184 @@ Comisión del 2% para el administrador
 
 ✅ Seguro: Protecciones contra reentrada y validaciones robustas
 
-📦 Instalación
-Clona el repositorio:
+🏗️ Estructura del Código
+El contrato está organizado en 5 secciones principales:
 
-bash
-git clone https://github.com/tu-usuario/subasta-flash.git
-cd subasta-flash
-Instala dependencias:
+1.- Definiciones iniciales:
 
-bash
-npm install
-🛠 Uso Básico
-Despliegue
+Versión de Solidity (pragma)
+
+Licencia (MIT)
+
+Estructura de datos OfertaIndividual
+
+2.- Variables de estado:
+
 solidity
-// Usando Hardhat/Foundry
-const SubastaFlash = await ethers.getContractFactory("SubastaFlashCompleta");
-const subasta = await SubastaFlash.deploy();
-Interacción
-javascript
-// Ofertar
-await subasta.ofertar({ value: ethers.utils.parseEther("1") });
+´´´bash
+address public immutable owner;
+address public mejorOferente;
+uint public mejorOferta;
+uint public inicio;
+uint public duracionInicial = 5 minutes;
+uint public duracionActual;
+bool public finalizada;
+´´´
+Sistemas de almacenamiento:
 
-// Retirar excedente
-await subasta.retirarExcedente(ethers.utils.parseEther("0.5"));
-
-// Finalizar subasta (solo owner)
-await subasta.finalizar();
-📖 Documentación de Funciones
-Funciones Principales
-Función	Descripción
-ofertar()	Envía ETH para participar (extiende subasta)
-retirarExcedente(uint monto)	Retira fondos no comprometidos
-finalizar()	Finaliza la subasta (solo owner)
-retirar()	Reclama fondos después de finalizar
-Consultas
-Función	Descripción
-obtenerTodasOfertas()	Devuelve historial completo
-tiempoRestante()	Muestra segundos hasta el final
-verBalance()	Muestra ETH en el contrato
-🔍 Estructura de Datos
 solidity
-struct OfertaIndividual {
-    uint monto;
-    uint timestamp; 
-    bool reembolsada;
-}
-
-// Almacenamiento
 mapping(address => OfertaIndividual[]) public historialOfertas;
 mapping(address => uint) public saldosParticipantes;
-🌐 Eventos
-Evento	Descripción
-NuevaOferta	Emitido al recibir oferta
-SubastaExtendida	Cuando se añade tiempo
-ReembolsoParcial	Al retirar fondos durante subasta
-⚠️ Consideraciones de Seguridad
-Solo el owner puede finalizar la subasta
+address[] public participantes;
+Eventos:
 
-Comisión del 2% aplicada a reembolsos
+solidity
+event NuevaOferta(address indexed oferente, uint monto, uint nuevoTiempoFinal);
+event SubastaExtendida(uint tiempoAnterior, uint nuevoTiempoFinal);
+event SubastaFinalizada(address ganador, uint monto);
+event FondosRetirados(address indexed to, uint amount);
+event ReembolsoParcial(address indexed oferente, uint monto);
+Funciones (clasificadas por propósito):
 
-Validaciones:
+Modificadores (subastaActiva, soloOwner)
 
-Ofertas deben ser ≥5% mayores
+Operaciones principales (ofertar, retirarExcedente)
 
-No se aceptan ofertas después del tiempo final
+Finalización (finalizar, retirar, retirarFondos)
 
-📝 Ejemplo de Flujo
-Despliegue: Subasta inicia con 5 minutos
+Consultas (obtenerTodasOfertas, tiempoRestante, verBalance)
 
-Oferta 1:
+🎯 Funcionalidades Clave
+1. Mecanismo de Ofertas
+solidity
+function ofertar() external payable subastaActiva {
+    require(msg.value > 0, "Debes enviar ETH");
+    uint total = saldosParticipantes[msg.sender] + msg.value;
+    uint minimoRequerido = mejorOferta + (mejorOferta * 5) / 100;
+    
+    if (mejorOferta > 0) {
+        require(total >= minimoRequerido, "Oferta debe ser ≥5% mayor");
+    }
+    
+    // Extensión de tiempo (+10 min)
+    duracionActual += 10 minutes;
+    
+    // Registro histórico
+    historialOfertas[msg.sender].push(OfertaIndividual({
+        monto: msg.value,
+        timestamp: block.timestamp,
+        reembolsada: false
+    }));
+    
+    // Actualización de estado
+    saldosParticipantes[msg.sender] = total;
+    mejorOferente = msg.sender;
+    mejorOferta = total;
+}
+2. Sistema de Extensiones
+Lógica: Cada oferta exitosa añade 10 minutos a duracionActual
 
-Envía 1 ETH
+Ejemplo:
 
-Tiempo se extiende a 15 minutos
+Subasta inicia con 5 min
 
-Oferta 2:
+Oferta 1 (t=0): duración = 15 min
 
-Debe ser ≥1.05 ETH
+Oferta 2 (t=10 min): duración = 25 min
 
-Tiempo se extiende a 25 minutos
+3. Reembolsos Parciales
+solidity
+function retirarExcedente(uint monto) external subastaActiva {
+    uint excedente = saldosParticipantes[msg.sender];
+    
+    if (msg.sender == mejorOferente) {
+        excedente -= mejorOferta; // Solo permite retirar el excedente
+    }
+    
+    require(excedente >= monto, "Fondos insuficientes");
+    saldosParticipantes[msg.sender] -= monto;
+    payable(msg.sender).transfer(monto);
+}
+4. Finalización y Comisiones
+solidity
+function retirarFondos() external soloOwner {
+    require(finalizada, "Subasta no finalizada");
+    uint monto = mejorOferta;
+    uint comision = (monto * 2) / 100;
+    uint neto = monto - comision;
+    payable(owner).transfer(neto); // Owner recibe el 98%
+}
+🔄 Flujo de Datos
+Diagram
+Code
 
-Finalización:
 
-Owner llama finalizar()
 
-Participantes reclaman fondos
 
-📜 Licencia
-MIT License - Ver LICENSE para detalles.
+
+
+
+
+
+📊 Estructura de Almacenamiento
+Variable	Tipo	Descripción
+historialOfertas	mapping(address → OfertaIndividual[])	Todas las ofertas por dirección
+saldosParticipantes	mapping(address → uint)	Balance total por participante
+participantes	address[]	Lista de todos los oferentes
+⚙️ Funciones de Consulta
+obtenerTodasOfertas():
+
+Devuelve 4 arrays paralelos:
+
+Direcciones
+
+Montos
+
+Timestamps
+
+Estados de reembolso
+
+tiempoRestante():
+
+solidity
+return (inicio + duracionActual) - block.timestamp;
+verBalance():
+
+solidity
+return address(this).balance;
+🛡️ Modelo de Seguridad
+Patrón Checks-Effects-Interactions:
+
+Todas las funciones validan (require) antes de actuar
+
+Estados se actualizan antes de transferencias ETH
+
+Protección contra reentrada:
+
+Uso de transfer() (limita gas a 2300 unidades)
+
+Acceso restringido:
+
+finalizar() y retirarFondos() solo para owner
+
+📝 Ejemplo de Transacción
+javascript
+// Oferta inicial
+await subasta.ofertar({ 
+    value: ethers.utils.parseEther("1"),
+    gasLimit: 300000 
+});
+
+// Consultar estado
+const [,,tiempos] = await subasta.obtenerTodasOfertas();
+console.log(`Oferta registrada en: ${new Date(tiempos[0]*1000)}`);
+Este diseño garantiza:
+
+Transparencia: Todas las ofertas son registradas públicamente
+
+Justicia: Mecanismo claro de extensiones y reembolsos
+
+Eficiencia: Costos de gas optimizados para operaciones frecuentes
+
+
+
