@@ -1,0 +1,520 @@
+{% extends 'base/base.html' %}
+{% load humanize %}
+
+{% block title %}Inventario Operativo - TR&RS{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'operations:inventory_list' %}">Operaciones</a></li>
+<li class="breadcrumb-item active">Inventario</li>
+{% endblock %}
+
+{% block extra_css %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
+
+<style>
+    .inventory-filters {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .table-container {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .stock-indicator {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .stock-ok {
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+
+    .stock-warning {
+        background: #fff3cd;
+        color: #664d03;
+    }
+
+    .stock-critical {
+        background: #f8d7da;
+        color: #842029;
+    }
+
+    .item-photo {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 5px;
+    }
+
+    .item-code {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #667eea;
+    }
+
+    .critical-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: #dc3545;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        font-size: 0.7rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter {
+        margin-bottom: 1rem;
+    }
+
+    .dataTables_wrapper .dataTables_paginate {
+        margin-top: 1rem;
+    }
+
+    table.dataTable thead th {
+        background: #f8f9fa;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        border-bottom: 2px solid #dee2e6 !important;
+    }
+
+    table.dataTable tbody tr:hover {
+        background: #f8f9fa;
+        cursor: pointer;
+    }
+
+    .action-buttons .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .stats-cards {
+        margin-bottom: 1.5rem;
+    }
+
+    .stat-mini-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid;
+    }
+
+    .stat-mini-card.primary {
+        border-color: #667eea;
+    }
+
+    .stat-mini-card.warning {
+        border-color: #ffc107;
+    }
+
+    .stat-mini-card.danger {
+        border-color: #dc3545;
+    }
+
+    .stat-mini-card.success {
+        border-color: #198754;
+    }
+
+    .stat-mini-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-mini-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        text-transform: uppercase;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>
+            <i class="fas fa-boxes me-2 text-primary"></i>
+            Inventario Operativo
+        </h1>
+        <p class="text-muted mb-0">Gestión y control de materiales, herramientas y equipos</p>
+    </div>
+    <div>
+        <button class="btn btn-outline-primary me-2" data-bs-toggle="modal" data-bs-target="#importModal">
+            <i class="fas fa-file-import me-2"></i>Importar
+        </button>
+        <a href="#" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>Nuevo Item
+        </a>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row stats-cards g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-mini-card primary">
+            <div class="stat-mini-value">{{ items|length }}</div>
+            <div class="stat-mini-label">
+                <i class="fas fa-box me-1"></i>Total de Items
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-mini-card success">
+            <div class="stat-mini-value">0</div>
+            <div class="stat-mini-label">
+                <i class="fas fa-check-circle me-1"></i>Stock OK
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-mini-card warning">
+            <div class="stat-mini-value">{{ low_stock_items }}</div>
+            <div class="stat-mini-label">
+                <i class="fas fa-exclamation-triangle me-1"></i>Stock Bajo
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="stat-mini-card danger">
+            <div class="stat-mini-value">0</div>
+            <div class="stat-mini-label">
+                <i class="fas fa-times-circle me-1"></i>Críticos
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="inventory-filters">
+    <form method="get" id="filterForm">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">
+                    <i class="fas fa-filter me-1"></i>Categoría
+                </label>
+                <select class="form-select" name="category">
+                    <option value="">Todas las categorías</option>
+                    <option value="tool">Herramienta</option>
+                    <option value="equipment">Equipo</option>
+                    <option value="material">Material</option>
+                    <option value="consumable">Consumible</option>
+                    <option value="ppe">EPP</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">
+                    <i class="fas fa-warehouse me-1"></i>Almacén
+                </label>
+                <select class="form-select" name="warehouse">
+                    <option value="">Todos los almacenes</option>
+                    {% for warehouse in warehouses %}
+                    <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">
+                    <i class="fas fa-exclamation-circle me-1"></i>Estado de Stock
+                </label>
+                <select class="form-select" id="stockStatus">
+                    <option value="">Todos</option>
+                    <option value="ok">Stock OK</option>
+                    <option value="low">Stock Bajo</option>
+                    <option value="critical">Crítico</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Filtrar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" name="low_stock" id="lowStockCheck" {% if request.GET.low_stock %}checked{% endif %}>
+            <label class="form-check-label" for="lowStockCheck">
+                Solo mostrar items bajo stock
+            </label>
+        </div>
+    </form>
+</div>
+
+<!-- Inventory Table -->
+<div class="table-container">
+    <table id="inventoryTable" class="table table-hover" style="width:100%">
+        <thead>
+            <tr>
+                <th>Foto</th>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Fabricante</th>
+                <th>Unidad</th>
+                <th>Costo Unit.</th>
+                <th>Stock Total</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr data-id="{{ item.id }}">
+                <td>
+                    <div class="position-relative">
+                        {% if item.photo %}
+                        <img src="{{ item.photo.url }}" class="item-photo" alt="{{ item.name }}">
+                        {% else %}
+                        <div class="item-photo bg-light d-flex align-items-center justify-content-center">
+                            <i class="fas fa-box text-muted"></i>
+                        </div>
+                        {% endif %}
+                        {% if item.is_critical %}
+                        <span class="critical-badge" title="Item Crítico">
+                            <i class="fas fa-star"></i>
+                        </span>
+                        {% endif %}
+                    </div>
+                </td>
+                <td>
+                    <span class="item-code">{{ item.code }}</span>
+                    {% if item.barcode %}
+                    <br><small class="text-muted"><i class="fas fa-barcode me-1"></i>{{ item.barcode }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    <strong>{{ item.name }}</strong>
+                    {% if item.description %}
+                    <br><small class="text-muted">{{ item.description|truncatewords:10 }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge bg-secondary">{{ item.get_category_display }}</span>
+                </td>
+                <td>
+                    {{ item.manufacturer|default:"-" }}
+                    {% if item.model %}
+                    <br><small class="text-muted">{{ item.model }}</small>
+                    {% endif %}
+                </td>
+                <td>{{ item.get_unit_display }}</td>
+                <td>${{ item.unit_cost|floatformat:2|intcomma }}</td>
+                <td>
+                    <strong>{{ item.get_total_stock|floatformat:2 }}</strong> {{ item.get_unit_display }}
+                    <br>
+                    <small class="text-muted">
+                        Min: {{ item.min_stock|floatformat:0 }} | Max: {{ item.max_stock|floatformat:0 }}
+                    </small>
+                </td>
+                <td>
+                    {% if item.is_low_stock %}
+                        {% if item.get_total_stock == 0 %}
+                        <span class="stock-indicator stock-critical">
+                            <i class="fas fa-times-circle me-1"></i>Agotado
+                        </span>
+                        {% else %}
+                        <span class="stock-indicator stock-warning">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Bajo
+                        </span>
+                        {% endif %}
+                    {% else %}
+                    <span class="stock-indicator stock-ok">
+                        <i class="fas fa-check-circle me-1"></i>OK
+                    </span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="action-buttons">
+                        <a href="{% url 'operations:inventory_detail' item.id %}" class="btn btn-sm btn-outline-primary" title="Ver Detalle">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <button class="btn btn-sm btn-outline-success" onclick="showMovementModal({{ item.id }})" title="Registrar Movimiento">
+                            <i class="fas fa-exchange-alt"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning" onclick="showQRCode('{{ item.code }}')" title="Ver Código QR">
+                            <i class="fas fa-qrcode"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="10" class="text-center text-muted py-4">
+                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                    <p>No se encontraron items en el inventario</p>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- QR Code Modal -->
+<div class="modal fade" id="qrModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-qrcode me-2"></i>
+                    Código QR
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="qrCodeContainer"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary">
+                    <i class="fas fa-download me-2"></i>Descargar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Movement Modal -->
+<div class="modal fade" id="movementModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exchange-alt me-2"></i>
+                    Registrar Movimiento de Inventario
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Formulario de movimiento se implementará aquí.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+
+<!-- JSZip for Excel export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<!-- QRCode.js -->
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    // Initialize DataTable
+    const table = $('#inventoryTable').DataTable({
+        responsive: true,
+        pageLength: 25,
+        order: [[1, 'asc']],
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json',
+        },
+        dom: 'Bfrtip',
+        buttons: [
+            {
+                extend: 'copy',
+                text: '<i class="fas fa-copy me-1"></i>Copiar',
+                className: 'btn btn-sm btn-outline-secondary'
+            },
+            {
+                extend: 'excel',
+                text: '<i class="fas fa-file-excel me-1"></i>Excel',
+                className: 'btn btn-sm btn-outline-success'
+            },
+            {
+                extend: 'print',
+                text: '<i class="fas fa-print me-1"></i>Imprimir',
+                className: 'btn btn-sm btn-outline-primary'
+            }
+        ],
+        columnDefs: [
+            { orderable: false, targets: [0, 9] },
+            { className: 'text-center', targets: [0, 5, 6, 8, 9] }
+        ]
+    });
+
+    // Stock status filter
+    $('#stockStatus').on('change', function() {
+        const value = $(this).val();
+        if (value === '') {
+            table.column(8).search('').draw();
+        } else if (value === 'ok') {
+            table.column(8).search('OK', true, false).draw();
+        } else if (value === 'low') {
+            table.column(8).search('Bajo', true, false).draw();
+        } else if (value === 'critical') {
+            table.column(8).search('Agotado', true, false).draw();
+        }
+    });
+
+    // Row click
+    $('#inventoryTable tbody').on('click', 'tr', function(e) {
+        // Don't navigate if clicking on action buttons
+        if (!$(e.target).closest('.action-buttons').length) {
+            const data = table.row(this).data();
+            if (data) {
+                const itemId = $(this).data('id');
+                window.location.href = `/operations/inventory/${itemId}/`;
+            }
+        }
+    });
+});
+
+// Show QR Code
+function showQRCode(code) {
+    const container = document.getElementById('qrCodeContainer');
+    container.innerHTML = '';
+
+    new QRCode(container, {
+        text: code,
+        width: 256,
+        height: 256,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H
+    });
+
+    new bootstrap.Modal(document.getElementById('qrModal')).show();
+}
+
+// Show movement modal
+function showMovementModal(itemId) {
+    // TODO: Load item data and show form
+    new bootstrap.Modal(document.getElementById('movementModal')).show();
+}
+</script>
+{% endblock %}

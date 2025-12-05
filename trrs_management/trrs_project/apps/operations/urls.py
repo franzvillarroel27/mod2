@@ -30,4 +30,9 @@ urlpatterns = [
 
     # API Endpoints
     path('api/inventory/<int:item_id>/stock/', views.api_inventory_stock, name='api_inventory_stock'),
+
+    # PDF Downloads
+    path('trainings/<int:training_id>/certificate/download/', views.download_training_certificate, name='download_training_certificate'),
+    path('services/<int:service_id>/report/download/', views.download_service_report, name='download_service_report'),
+    path('inventory/report/download/', views.download_inventory_report, name='download_inventory_report'),
 ]

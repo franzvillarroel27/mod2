@@ -1,0 +1,539 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Calendario de Operaciones - TR&RS{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'operations:operation_plan_list' %}">Operaciones</a></li>
+<li class="breadcrumb-item active">Calendario</li>
+{% endblock %}
+
+{% block extra_css %}
+<!-- FullCalendar CSS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css' rel='stylesheet' />
+<style>
+    .calendar-container {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    #calendar {
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    .fc-event {
+        cursor: pointer;
+        border: none !important;
+        padding: 2px 4px;
+    }
+
+    .fc-daygrid-event {
+        white-space: normal !important;
+    }
+
+    .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+    }
+
+    .filter-section {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .fc .fc-button {
+        background-color: #667eea;
+        border-color: #667eea;
+    }
+
+    .fc .fc-button:hover {
+        background-color: #5568d3;
+        border-color: #5568d3;
+    }
+
+    .fc .fc-button-active {
+        background-color: #4553b8;
+        border-color: #4553b8;
+    }
+
+    .fc-toolbar-title {
+        font-size: 1.75rem !important;
+        font-weight: 700 !important;
+        color: #212529;
+    }
+
+    .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .task-detail-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .task-detail-item:last-child {
+        border-bottom: none;
+    }
+
+    .task-detail-label {
+        font-weight: 600;
+        color: #6c757d;
+        margin-bottom: 0.25rem;
+    }
+
+    .task-detail-value {
+        color: #212529;
+    }
+
+    .progress-bar-container {
+        height: 25px;
+        background: #e9ecef;
+        border-radius: 5px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>
+            <i class="fas fa-calendar-alt me-2 text-primary"></i>
+            Calendario de Operaciones
+        </h1>
+        <p class="text-muted mb-0">Visualiza y gestiona todas las tareas y eventos operacionales</p>
+    </div>
+    <div>
+        <a href="{% url 'operations:operation_plan_list' %}" class="btn btn-outline-primary">
+            <i class="fas fa-list me-2"></i>Vista de Lista
+        </a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newTaskModal">
+            <i class="fas fa-plus me-2"></i>Nueva Tarea
+        </button>
+    </div>
+</div>
+
+<!-- Filters Section -->
+<div class="filter-section">
+    <div class="row align-items-center">
+        <div class="col-md-3">
+            <label class="form-label">
+                <i class="fas fa-filter me-1"></i>Filtrar por Estado
+            </label>
+            <select class="form-select" id="statusFilter">
+                <option value="">Todos los estados</option>
+                <option value="pending">Pendiente</option>
+                <option value="in_progress">En Progreso</option>
+                <option value="completed">Completada</option>
+                <option value="blocked">Bloqueada</option>
+                <option value="cancelled">Cancelada</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">
+                <i class="fas fa-exclamation-circle me-1"></i>Filtrar por Prioridad
+            </label>
+            <select class="form-select" id="priorityFilter">
+                <option value="">Todas las prioridades</option>
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
+                <option value="critical">Crítica</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">
+                <i class="fas fa-search me-1"></i>Buscar
+            </label>
+            <input type="text" class="form-control" id="searchInput" placeholder="Buscar tareas...">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">&nbsp;</label>
+            <button class="btn btn-outline-secondary w-100" id="clearFilters">
+                <i class="fas fa-redo me-1"></i>Limpiar
+            </button>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend mt-3">
+        <div class="legend-item">
+            <div class="legend-color" style="background: #198754;"></div>
+            <span>Completada</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #0d6efd;"></div>
+            <span>En Progreso</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #6c757d;"></div>
+            <span>Pendiente</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffc107;"></div>
+            <span>Bloqueada</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #dc3545;"></div>
+            <span>Cancelada</span>
+        </div>
+    </div>
+</div>
+
+<!-- Calendar -->
+<div class="calendar-container">
+    <div id="calendar"></div>
+</div>
+
+<!-- Task Detail Modal -->
+<div class="modal fade" id="taskDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-tasks me-2"></i>
+                    Detalle de la Tarea
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="taskDetailContent">
+                <!-- Content will be loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <a href="#" id="editTaskBtn" class="btn btn-primary">
+                    <i class="fas fa-edit me-2"></i>Editar
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Task Modal (Placeholder) -->
+<div class="modal fade" id="newTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2"></i>
+                    Nueva Tarea
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Formulario de nueva tarea se implementará con el formulario de OperationTask.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- FullCalendar JS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.10/locales/es.global.min.js'></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+
+    // Sample events data (in production, this should come from the backend)
+    const events = [
+        {
+            id: '1',
+            title: 'Inspección de Equipos',
+            start: '2024-12-10T09:00:00',
+            end: '2024-12-10T12:00:00',
+            backgroundColor: '#0d6efd',
+            borderColor: '#0d6efd',
+            extendedProps: {
+                plan: 'Plan Operacional A',
+                status: 'in_progress',
+                priority: 'high',
+                progress: 65,
+                assignedTo: 'Juan Pérez',
+                description: 'Inspección rutinaria de equipos de perforación'
+            }
+        },
+        {
+            id: '2',
+            title: 'Mantenimiento Preventivo',
+            start: '2024-12-12',
+            end: '2024-12-14',
+            backgroundColor: '#198754',
+            borderColor: '#198754',
+            extendedProps: {
+                plan: 'Plan de Mantenimiento Q4',
+                status: 'completed',
+                priority: 'medium',
+                progress: 100,
+                assignedTo: 'María García',
+                description: 'Mantenimiento preventivo de bombas'
+            }
+        },
+        {
+            id: '3',
+            title: 'Capacitación HSEQ',
+            start: '2024-12-15T14:00:00',
+            end: '2024-12-15T17:00:00',
+            backgroundColor: '#6c757d',
+            borderColor: '#6c757d',
+            extendedProps: {
+                plan: 'Programa de Capacitación',
+                status: 'pending',
+                priority: 'low',
+                progress: 0,
+                assignedTo: 'Pedro López',
+                description: 'Capacitación en seguridad operacional'
+            }
+        },
+        {
+            id: '4',
+            title: 'Servicio de Casing Running',
+            start: '2024-12-08T06:00:00',
+            end: '2024-12-09T18:00:00',
+            backgroundColor: '#ffc107',
+            borderColor: '#ffc107',
+            extendedProps: {
+                plan: 'Servicios Pozo X-123',
+                status: 'blocked',
+                priority: 'critical',
+                progress: 30,
+                assignedTo: 'Carlos Ruiz',
+                description: 'Instalación de casing en pozo X-123'
+            }
+        }
+    ];
+
+    let calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'es',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+        },
+        buttonText: {
+            today: 'Hoy',
+            month: 'Mes',
+            week: 'Semana',
+            day: 'Día',
+            list: 'Lista'
+        },
+        events: events,
+        eventClick: function(info) {
+            showTaskDetail(info.event);
+        },
+        eventDidMount: function(info) {
+            // Add tooltip
+            info.el.title = info.event.extendedProps.description;
+        },
+        height: 'auto',
+        selectable: true,
+        editable: true,
+        eventDrop: function(info) {
+            // Handle event drop (update task dates)
+            console.log('Task moved:', info.event.title);
+            // TODO: Send AJAX request to update task
+        },
+        eventResize: function(info) {
+            // Handle event resize (update task duration)
+            console.log('Task resized:', info.event.title);
+            // TODO: Send AJAX request to update task
+        }
+    });
+
+    calendar.render();
+
+    // Show task detail
+    function showTaskDetail(event) {
+        const props = event.extendedProps;
+        const progressColor = props.progress >= 75 ? '#198754' : props.progress >= 50 ? '#0d6efd' : props.progress >= 25 ? '#ffc107' : '#dc3545';
+
+        const content = `
+            <div class="task-detail-item">
+                <div class="task-detail-label">Plan de Operación</div>
+                <div class="task-detail-value">${props.plan}</div>
+            </div>
+            <div class="task-detail-item">
+                <div class="task-detail-label">Descripción</div>
+                <div class="task-detail-value">${props.description}</div>
+            </div>
+            <div class="task-detail-item">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="task-detail-label">Fecha de Inicio</div>
+                        <div class="task-detail-value">
+                            <i class="fas fa-calendar me-2"></i>
+                            ${event.start.toLocaleString('es-CO')}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="task-detail-label">Fecha de Fin</div>
+                        <div class="task-detail-value">
+                            <i class="fas fa-calendar me-2"></i>
+                            ${event.end ? event.end.toLocaleString('es-CO') : 'No especificada'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="task-detail-item">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="task-detail-label">Estado</div>
+                        <div class="task-detail-value">
+                            <span class="badge bg-${getStatusColor(props.status)}">
+                                ${getStatusText(props.status)}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="task-detail-label">Prioridad</div>
+                        <div class="task-detail-value">
+                            <span class="badge bg-${getPriorityColor(props.priority)}">
+                                ${getPriorityText(props.priority)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="task-detail-item">
+                <div class="task-detail-label">Asignado a</div>
+                <div class="task-detail-value">
+                    <i class="fas fa-user me-2"></i>
+                    ${props.assignedTo}
+                </div>
+            </div>
+            <div class="task-detail-item">
+                <div class="task-detail-label">Progreso</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" style="width: ${props.progress}%; background: ${progressColor};">
+                        ${props.progress}%
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('taskDetailContent').innerHTML = content;
+        document.getElementById('editTaskBtn').href = '#'; // TODO: Set edit URL
+        new bootstrap.Modal(document.getElementById('taskDetailModal')).show();
+    }
+
+    function getStatusColor(status) {
+        const colors = {
+            'pending': 'secondary',
+            'in_progress': 'primary',
+            'completed': 'success',
+            'blocked': 'warning',
+            'cancelled': 'danger'
+        };
+        return colors[status] || 'secondary';
+    }
+
+    function getStatusText(status) {
+        const texts = {
+            'pending': 'Pendiente',
+            'in_progress': 'En Progreso',
+            'completed': 'Completada',
+            'blocked': 'Bloqueada',
+            'cancelled': 'Cancelada'
+        };
+        return texts[status] || status;
+    }
+
+    function getPriorityColor(priority) {
+        const colors = {
+            'low': 'info',
+            'medium': 'primary',
+            'high': 'warning',
+            'critical': 'danger'
+        };
+        return colors[priority] || 'secondary';
+    }
+
+    function getPriorityText(priority) {
+        const texts = {
+            'low': 'Baja',
+            'medium': 'Media',
+            'high': 'Alta',
+            'critical': 'Crítica'
+        };
+        return texts[priority] || priority;
+    }
+
+    // Filters
+    document.getElementById('statusFilter').addEventListener('change', function() {
+        filterEvents();
+    });
+
+    document.getElementById('priorityFilter').addEventListener('change', function() {
+        filterEvents();
+    });
+
+    document.getElementById('searchInput').addEventListener('input', function() {
+        filterEvents();
+    });
+
+    document.getElementById('clearFilters').addEventListener('click', function() {
+        document.getElementById('statusFilter').value = '';
+        document.getElementById('priorityFilter').value = '';
+        document.getElementById('searchInput').value = '';
+        filterEvents();
+    });
+
+    function filterEvents() {
+        const status = document.getElementById('statusFilter').value;
+        const priority = document.getElementById('priorityFilter').value;
+        const search = document.getElementById('searchInput').value.toLowerCase();
+
+        const filteredEvents = events.filter(event => {
+            const matchesStatus = !status || event.extendedProps.status === status;
+            const matchesPriority = !priority || event.extendedProps.priority === priority;
+            const matchesSearch = !search ||
+                event.title.toLowerCase().includes(search) ||
+                event.extendedProps.description.toLowerCase().includes(search);
+
+            return matchesStatus && matchesPriority && matchesSearch;
+        });
+
+        calendar.removeAllEvents();
+        calendar.addEventSource(filteredEvents);
+    }
+});
+</script>
+{% endblock %}

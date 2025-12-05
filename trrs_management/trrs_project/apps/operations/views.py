@@ -338,3 +338,80 @@ def api_inventory_stock(request, item_id):
         },
         'inventory': inventory_data
     })
+
+
+# ==================== PDF DOWNLOADS ====================
+
+@login_required
+def download_training_certificate(request, training_id):
+    """Descargar certificado de capacitación en PDF"""
+    from .utils.pdf_generators import CertificateGenerator
+
+    employee_training = get_object_or_404(
+        EmployeeTraining.objects.select_related(
+            'employee', 'schedule__course', 'schedule'
+        ),
+        pk=training_id
+    )
+
+    # Verificar que el usuario tenga permiso
+    if not (request.user == employee_training.employee or
+            request.user.is_staff or
+            request.user.can_manage_operations()):
+        messages.error(request, 'No tienes permiso para descargar este certificado.')
+        return redirect('operations:my_trainings')
+
+    # Verificar que la capacitación esté aprobada
+    if employee_training.status != 'passed':
+        messages.error(request, 'Esta capacitación aún no está aprobada.')
+        return redirect('operations:my_trainings')
+
+    # Generar PDF
+    generator = CertificateGenerator(employee_training)
+    return generator.get_response()
+
+
+@login_required
+@permission_required('operations.view_serviceorder', raise_exception=True)
+def download_service_report(request, service_id):
+    """Descargar reporte de servicio en PDF"""
+    from .utils.pdf_generators import ServiceReportGenerator
+
+    service_order = get_object_or_404(
+        ServiceOrder.objects.select_related('service_type', 'supervisor'),
+        pk=service_id
+    )
+
+    # Generar PDF
+    generator = ServiceReportGenerator(service_order)
+    return generator.get_response()
+
+
+@login_required
+@permission_required('operations.view_operationalitem', raise_exception=True)
+def download_inventory_report(request):
+    """Descargar reporte de inventario en PDF"""
+    from .utils.pdf_generators import InventoryReportGenerator
+
+    # Obtener items según filtros
+    items = OperationalItem.objects.filter(is_active=True)
+
+    category = request.GET.get('category')
+    if category:
+        items = items.filter(category=category)
+
+    warehouse = request.GET.get('warehouse')
+    if warehouse:
+        items = items.filter(inventory_records__warehouse_id=warehouse).distinct()
+
+    low_stock = request.GET.get('low_stock')
+    if low_stock == '1':
+        items = [item for item in items if item.is_low_stock()]
+
+    # Generar PDF
+    title = "Reporte de Inventario Operativo"
+    if category:
+        title += f" - Categoría: {dict(OperationalItem.CATEGORY_CHOICES).get(category, category)}"
+
+    generator = InventoryReportGenerator(items, title=title)
+    return generator.get_response()
